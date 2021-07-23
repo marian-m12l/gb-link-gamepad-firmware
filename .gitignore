@@ -1,0 +1,13 @@
+.vscode
+CMakeFiles
+elf2uf2
+generated
+pioasm
+cmake_install.cmake
+CMakeCache.txt
+CMakeDoxy*
+gbgamepad.*
+Makefile
+*.pio.h
+pico-sdk
+_deps

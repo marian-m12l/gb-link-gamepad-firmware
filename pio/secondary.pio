@@ -1,0 +1,57 @@
+
+.program secondary
+
+; GB link is similar to SPI mode 3: SCK idles high (polarity=1) and data (MOSI) is sampled on the trailing (rising) edge (phase=1)
+
+
+    wait 1 pin 31               ; wait for clock 1
+idle:
+    wait 0 pin 31               ; wait for clock 0
+    jmp !osre fifo_output       ; write data from fifo / output shift register, if not empty
+    jmp zero_output             ; otherwise write zeros
+zero_output:
+    mov pins, null              ; write 0 to MISO pin right after the falling clock edge
+    jmp input
+fifo_output:
+    out pins, 1                 ; write bit from FIFO/OSR to MISO pin right after the falling clock edge
+input:
+    wait 1 pin 31               ; wait for clock pin rising edge
+    in pins, 1                  ; read data pin (MOSI). Autopush fills the RX FIFO.
+    jmp idle
+
+
+% c-sdk {
+static inline void secondary_program_init(PIO pio, uint sm, uint offset, uint pin_sck, uint pin_mosi, uint pin_miso) {
+    pio_sm_config c = secondary_program_get_default_config(offset);
+
+    // In PINS: 0=MOSI, 31=CLK
+    sm_config_set_in_pins(&c, pin_mosi);
+    //sm_config_set_in_pins(&c, pin_sck);
+    sm_config_set_out_pins(&c, pin_miso, 1);
+    
+    // Set the pin directions: SCK and MOSI are IN, MISO is OUT
+    pio_sm_set_pindirs_with_mask(pio, sm, (1u << pin_miso), (1u << pin_sck) | (1u << pin_mosi) | (1u << pin_miso));
+    
+    pio_gpio_init(pio, pin_mosi);
+    pio_gpio_init(pio, pin_sck);
+    pio_gpio_init(pio, pin_miso);
+
+    // Shifting to left matches the customary MSB-first ordering of SPI.
+    sm_config_set_in_shift(
+        &c,
+        false, // Shift-to-right = false (i.e. shift to left)
+        true,  // Autopush enabled
+        8      // Autopush threshold = 8
+    );
+    sm_config_set_out_shift(
+        &c,
+        false, // Shift-to-right = false (i.e. shift to left)
+        true,  // Autopull enabled
+        8      // Autopull threshold = 8
+    );
+
+    // Load our configuration, and start the program from the beginning
+    pio_sm_init(pio, sm, offset, &c);
+    pio_sm_set_enabled(pio, sm, true);
+}
+%}
